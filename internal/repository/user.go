@@ -31,7 +31,7 @@ func (r *UserRepository) Create(user *domain.User) error {
 		return err
 	}
 
-	user.ID = int(id)
+	user.ID = id
 
 	row := r.db.QueryRow("SELECT created_at, updated_at FROM users WHERE id = ?", user.ID)
 	err = row.Scan(&user.CreatedAt, &user.UpdatedAt)
