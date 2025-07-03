@@ -1,7 +1,9 @@
+// Package repository
 package repository
 
 import (
 	"database/sql"
+	"fmt"
 	"go-crud/internal/domain"
 )
 
@@ -40,7 +42,20 @@ func (r *UserRepository) Create(user *domain.User) error {
 }
 
 func (r *UserRepository) GetByID(id int) (*domain.User, error) {
-	return nil, nil
+	query := `
+	SELECT id, username, email, created_at, updated_at FROM users
+	WHERE id = ?`
+
+	row := r.db.QueryRow(query, id)
+
+	var user domain.User
+	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		fmt.Printf("user not found error: %v", err)
+		return nil, err
+	}
+
+	return &user, nil
 }
 
 func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
