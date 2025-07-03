@@ -1,13 +1,13 @@
+// Package router serves mux with registered routes
 package router
 
-import "net/http"
+import (
+	"go-crud/internal/handler"
+	"net/http"
+)
 
-func NewRouter(
-	userCreateHandler http.Handler,
-) *http.ServeMux {
+func NewRouter(h *handler.Handler) *http.ServeMux {
 	mux := http.NewServeMux()
-
-	mux.Handle("/user", userCreateHandler)
-
+	h.RegisterRoutes(mux)
 	return mux
 }
