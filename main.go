@@ -2,7 +2,10 @@ package main
 
 import (
 	"go-crud/internal/config"
+	"go-crud/internal/handlers"
 	"go-crud/internal/migrate"
+	"go-crud/internal/repository"
+	"go-crud/internal/server"
 	"go-crud/pkg/database"
 	"log"
 
@@ -24,4 +27,12 @@ func main() {
 	}
 
 	defer db.Close()
+
+	userRepo := repository.NewUserRepository(db)
+	userCreateHandler := handlers.NewUserCreateHandler(userRepo)
+
+	err = server.RunServer(db, userCreateHandler)
+	if err != nil {
+		log.Fatalf("server failed to start: %v", err)
+	}
 }

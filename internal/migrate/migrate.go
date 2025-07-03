@@ -16,14 +16,12 @@ func ApplyMigrations(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("failed to create MySQL driver instance: %w", err)
 	}
-	defer driver.Close()
 
 	m, err := migrate.NewWithDatabaseInstance(
 		"file://db/migrations",
 		"mysql",
 		driver,
 	)
-	fmt.Println(m)
 	if err != nil {
 		return fmt.Errorf("migration init error: %w", err)
 	}
