@@ -41,7 +41,7 @@ func (r *UserRepository) Create(user *domain.User) error {
 	return nil
 }
 
-func (r *UserRepository) GetByID(id int) (*domain.User, error) {
+func (r *UserRepository) GetByID(id int64) (*domain.User, error) {
 	query := `
 	SELECT id, username, email, created_at, updated_at FROM users
 	WHERE id = ?`
@@ -66,6 +66,6 @@ func (r *UserRepository) Update(user *domain.User) error {
 	return nil
 }
 
-func (r *UserRepository) Delete(id int) error {
+func (r *UserRepository) Delete(id int64) error {
 	return nil
 }

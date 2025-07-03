@@ -103,7 +103,7 @@ func TestUserRepository_GetByID(t *testing.T) {
 
 	subtests := []struct {
 		name         string
-		id           int
+		id           int64
 		expectedUser *domain.User
 		expectedErr  error
 		setupMock    func()

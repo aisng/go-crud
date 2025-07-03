@@ -52,7 +52,7 @@ func (h *UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := strconv.Atoi(idStr)
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid paramter 'id'", http.StatusBadRequest)
 		return
