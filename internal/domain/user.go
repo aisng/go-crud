@@ -3,7 +3,7 @@ package domain
 import "time"
 
 type User struct {
-	ID        int       `json:"id"         db:"id"`
+	ID        int64     `json:"id"         db:"id"`
 	Email     string    `json:"email"      db:"email"`
 	Username  string    `json:"username"   db:"username"`
 	Password  string    `json:"-"          db:"password"`
