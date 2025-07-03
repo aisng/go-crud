@@ -2,12 +2,13 @@ package main
 
 import (
 	"go-crud/internal/config"
-	"go-crud/internal/handlers"
+	"go-crud/internal/handler"
 	"go-crud/internal/migrate"
 	"go-crud/internal/repository"
-	"go-crud/internal/server"
+	"go-crud/internal/router"
 	"go-crud/pkg/database"
 	"log"
+	"net/http"
 
 	"github.com/joho/godotenv"
 )
@@ -28,11 +29,11 @@ func main() {
 
 	defer db.Close()
 
-	userRepo := repository.NewUserRepository(db)
-	userCreateHandler := handlers.NewUserCreateHandler(userRepo)
-
-	err = server.RunServer(db, userCreateHandler)
-	if err != nil {
-		log.Fatalf("server failed to start: %v", err)
+	deps := handler.Dependencies{
+		UserRepo: repository.NewUserRepository(db),
 	}
+	handler := handler.NewHandler(deps)
+	router := router.NewRouter(handler)
+
+	http.ListenAndServe(":8080", router)
 }
