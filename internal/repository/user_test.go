@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"go-crud/internal/domain"
+	"reflect"
 	"testing"
 	"time"
 
@@ -115,14 +116,13 @@ func TestUserRepository_GetByID(t *testing.T) {
 				ID:        1,
 				Username:  "testuser",
 				Email:     "test@email.com",
-				Password:  "hashedpassword123",
 				CreatedAt: fixedTime,
 				UpdatedAt: fixedTime,
 			},
 			expectedErr: nil,
 			setupMock: func() {
-				rows := sqlmock.NewRows([]string{"id", "username", "email", "password", "created_at", "updated_at"}).
-					AddRow(1, "testuser", "test@email.com", "hashedpassword123", fixedTime, fixedTime)
+				rows := sqlmock.NewRows([]string{"id", "username", "email", "created_at", "updated_at"}).
+					AddRow(1, "testuser", "test@email.com", fixedTime, fixedTime)
 
 				mock.ExpectQuery(`SELECT id, username, email, created_at, updated_at FROM users WHERE id = \?`).
 					WithArgs(1).
@@ -136,7 +136,7 @@ func TestUserRepository_GetByID(t *testing.T) {
 			expectedErr:  fmt.Errorf("user not found"),
 			setupMock: func() {
 				mock.ExpectQuery(`SELECT id, username, email, created_at, updated_at FROM users WHERE id = \?`).
-					WithArgs(1).
+					WithArgs(9999).
 					WillReturnError(fmt.Errorf("user not found"))
 			},
 		},
@@ -148,11 +148,11 @@ func TestUserRepository_GetByID(t *testing.T) {
 
 			user, err := repo.GetByID(subtest.id)
 
-			if subtest.expectedErr != err {
+			if (subtest.expectedErr == nil && err != nil) || (subtest.expectedErr != nil && err == nil) {
 				t.Errorf("expected error: %v, got: %v", subtest.expectedErr, err)
 			}
 
-			if subtest.expectedUser != user {
+			if !reflect.DeepEqual(subtest.expectedUser, user) {
 				t.Errorf("expected user: %v, got: %v", subtest.expectedUser, user)
 			}
 		})
