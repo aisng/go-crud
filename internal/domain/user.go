@@ -14,6 +14,12 @@ type User struct {
 type UserRepository interface {
 	Create(user *User) error
 	GetByID(id int64) (*User, error)
-	Update(user *User) error
+	Update(id int64, upd *UserUpdate) error
 	Delete(id int64) error
+}
+
+type UserUpdate struct {
+	Username *string `json:"username,omitempty"`
+	Email    *string `json:"email,omitempty"`
+	Password *string `json:"password,omitempty"`
 }

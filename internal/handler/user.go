@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"go-crud/internal/domain"
 	"net/http"
 	"strconv"
@@ -67,4 +68,54 @@ func (h *UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(user)
+}
+
+func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	idStr, err := parsePathParam(r, "users")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid parameter 'id", http.StatusBadRequest)
+		return
+	}
+
+	var userUpd domain.UserUpdate
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&userUpd); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	err = h.userRepo.Update(id, &userUpd)
+	if err != nil {
+		if err.Error() == "user not found" {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf("Failed to update user with id %d, err: %v", id, err), http.StatusInternalServerError)
+		return
+	}
+
+	user, err := h.userRepo.GetByID(id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("User with id %d updated but not retrieved", id), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(user)
+}
+
+func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }

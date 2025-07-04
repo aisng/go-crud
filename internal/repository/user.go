@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"go-crud/internal/domain"
+	"strings"
 )
 
 type UserRepository struct {
@@ -58,7 +59,46 @@ func (r *UserRepository) GetByID(id int64) (*domain.User, error) {
 	return &user, nil
 }
 
-func (r *UserRepository) Update(user *domain.User) error {
+func (r *UserRepository) Update(id int64, upd *domain.UserUpdate) error {
+	setClauses := []string{}
+	args := []any{}
+
+	if upd.Username != nil {
+		setClauses = append(setClauses, "username = ?")
+		args = append(args, *upd.Username)
+	}
+
+	if upd.Email != nil {
+		setClauses = append(setClauses, "email = ?")
+		args = append(args, *upd.Email)
+	}
+
+	if upd.Password != nil {
+		setClauses = append(setClauses, "password = ?")
+		args = append(args, *upd.Password)
+	}
+
+	if len(setClauses) == 0 {
+		return nil
+	}
+
+	setClauses = append(setClauses, "updated_at = NOW()")
+	query := "UPDATE users SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+	args = append(args, id)
+
+	result, err := r.db.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
 	return nil
 }
 

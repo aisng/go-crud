@@ -91,6 +91,7 @@ func TestUserRepository_Create(t *testing.T) {
 		})
 	}
 }
+func strPtr(s string) *string { return &s }
 
 func TestUserRepository_GetByID(t *testing.T) {
 	db, mock, err := sqlmock.New()
@@ -154,6 +155,72 @@ func TestUserRepository_GetByID(t *testing.T) {
 
 			if !reflect.DeepEqual(subtest.expectedUser, user) {
 				t.Errorf("expected user: %v, got: %v", subtest.expectedUser, user)
+			}
+		})
+	}
+}
+
+func TestUserRepository_Update(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to open sqlmock database: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewUserRepository(db)
+
+	subtests := []struct {
+		name        string
+		id          int64
+		update      *domain.UserUpdate
+		expectedErr error
+		setupMock   func()
+	}{
+		{
+			name: "user found and updated",
+			id:   1,
+			update: &domain.UserUpdate{
+				Email:    strPtr("new@email.com"),
+				Username: strPtr("newuser"),
+			},
+			setupMock: func() {
+				mock.ExpectExec(`UPDATE users SET username = \?, email = \?, updated_at = NOW\(\) WHERE id = \?`).
+					WithArgs("newuser", "new@email.com", 1).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "user not found",
+			id:   999,
+			update: &domain.UserUpdate{
+				Email: strPtr("notfound@email.com"),
+			},
+			setupMock: func() {
+				mock.ExpectExec(`UPDATE users SET email = \?, updated_at = NOW\(\) WHERE id = \?`).
+					WithArgs("notfound@email.com", 999).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+			},
+			expectedErr: fmt.Errorf("user not found"),
+		},
+		{
+			name:   "no fields to update",
+			id:     2,
+			update: &domain.UserUpdate{},
+			setupMock: func() {
+			},
+			expectedErr: nil,
+		},
+	}
+
+	for _, subtest := range subtests {
+		t.Run(subtest.name, func(t *testing.T) {
+			subtest.setupMock()
+
+			err := repo.Update(subtest.id, subtest.update)
+
+			if (subtest.expectedErr == nil && err != nil) || (subtest.expectedErr != nil && err == nil) {
+				t.Errorf("expected error: %v, got: %v", subtest.expectedErr, err)
 			}
 		})
 	}

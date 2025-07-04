@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -152,9 +153,9 @@ func TestUserHandler_GetByID(t *testing.T) {
 			method:     http.MethodGet,
 			path:       "/users/1b",
 			repoUser:   nil,
-			wantErr:    fmt.Errorf("Invalid paramter 'id'\n"),
+			wantErr:    fmt.Errorf("Invalid parameter 'id'\n"),
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "Invalid paramter 'id'\n",
+			wantBody:   "Invalid parameter 'id'\n",
 		},
 	}
 
@@ -192,10 +193,124 @@ func TestUserHandler_GetByID(t *testing.T) {
 	}
 }
 
+func strPtr(s string) *string { return &s }
+
+func TestUserHandler_Update(t *testing.T) {
+	updatedTime := fixedTime.Add(time.Hour)
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		repoUser   *domain.User
+		updateErr  error
+		body       string
+		wantStatus int
+		wantBody   string
+		wantUpdate *domain.UserUpdate
+	}{
+		{
+			name:   "update email success",
+			method: http.MethodPut,
+			path:   "/users/1",
+			repoUser: &domain.User{
+				ID:        1,
+				Username:  "olduser",
+				Email:     "new@email.com",
+				CreatedAt: fixedTime,
+				UpdatedAt: updatedTime,
+			},
+			updateErr:  nil,
+			body:       `{"email":"new@email.com"}`,
+			wantStatus: http.StatusOK,
+			wantBody: fmt.Sprintf(
+				`{"id":1,"email":"new@email.com","username":"olduser","created_at":"%s","updated_at":"%s"}`,
+				fixedTime.Format(time.RFC3339), updatedTime.Format(time.RFC3339)),
+			wantUpdate: &domain.UserUpdate{Email: strPtr("new@email.com")},
+		},
+		{
+			name:       "unknown field in body",
+			method:     http.MethodPut,
+			path:       "/users/1",
+			repoUser:   nil,
+			updateErr:  nil,
+			body:       `{"mail":"new@email.com"}`,
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "Invalid JSON\n",
+			wantUpdate: nil,
+		},
+		{
+			name:       "invalid method",
+			method:     http.MethodPatch,
+			path:       "/users/1",
+			repoUser:   nil,
+			updateErr:  nil,
+			body:       `{"email":"new@email.com"}`,
+			wantStatus: http.StatusMethodNotAllowed,
+			wantBody:   "Method not allowed\n",
+			wantUpdate: nil,
+		},
+		{
+			name:       "user not found",
+			method:     http.MethodPut,
+			path:       "/users/9999",
+			repoUser:   nil,
+			updateErr:  fmt.Errorf("user not found"),
+			body:       `{"email":"notfound@email.com"}`,
+			wantStatus: http.StatusNotFound,
+			wantBody:   "User not found\n",
+			wantUpdate: &domain.UserUpdate{Email: strPtr("notfound@email.com")},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var gotUpdate *domain.UserUpdate
+
+			repo := &mockUserRepo{
+				updateFunc: func(id int64, upd *domain.UserUpdate) error {
+					gotUpdate = upd
+					return test.updateErr
+				},
+				getByIDFunc: func(id int64) (*domain.User, error) {
+					return test.repoUser, nil
+				},
+			}
+			handler := NewUserHandler(repo)
+			req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+
+			w := httptest.NewRecorder()
+			handler.Update(w, req)
+
+			resp := w.Result()
+			defer resp.Body.Close()
+
+			if test.wantStatus != resp.StatusCode {
+				t.Errorf("expected status code: %v, got: %v", test.wantStatus, resp.StatusCode)
+			}
+
+			respBody, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			respBodyStr := string(respBody)
+
+			if strings.TrimSpace(respBodyStr) != strings.TrimSpace(test.wantBody) {
+				t.Errorf("expected response body: %s, got: %s", test.wantBody, respBodyStr)
+			}
+
+			if test.wantUpdate != nil && gotUpdate != nil {
+				if !reflect.DeepEqual(test.wantUpdate, gotUpdate) {
+					t.Errorf("expected update: %+v, got: %+v", test.wantUpdate, gotUpdate)
+				}
+			}
+		})
+	}
+}
+
 type mockUserRepo struct {
 	createFunc  func(*domain.User) error
 	getByIDFunc func(int64) (*domain.User, error)
-	updateFunc  func(*domain.User) error
+	updateFunc  func(int64, *domain.UserUpdate) error
 	deleteFunc  func(int64) error
 }
 
@@ -216,9 +331,9 @@ func (m *mockUserRepo) GetByID(id int64) (*domain.User, error) {
 	return nil, nil
 }
 
-func (m *mockUserRepo) Update(u *domain.User) error {
+func (m *mockUserRepo) Update(id int64, upd *domain.UserUpdate) error {
 	if m.updateFunc != nil {
-		return m.updateFunc(u)
+		return m.updateFunc(id, upd)
 	}
 	return nil
 }
