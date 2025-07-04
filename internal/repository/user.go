@@ -58,10 +58,6 @@ func (r *UserRepository) GetByID(id int64) (*domain.User, error) {
 	return &user, nil
 }
 
-func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
-	return nil, nil
-}
-
 func (r *UserRepository) Update(user *domain.User) error {
 	return nil
 }

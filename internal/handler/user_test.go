@@ -195,7 +195,6 @@ func TestUserHandler_GetByID(t *testing.T) {
 type mockUserRepo struct {
 	createFunc  func(*domain.User) error
 	getByIDFunc func(int64) (*domain.User, error)
-	getByEmail  func(string) (*domain.User, error)
 	updateFunc  func(*domain.User) error
 	deleteFunc  func(int64) error
 }
@@ -229,11 +228,4 @@ func (m *mockUserRepo) Delete(id int64) error {
 		return m.deleteFunc(id)
 	}
 	return nil
-}
-
-func (m *mockUserRepo) GetByEmail(email string) (*domain.User, error) {
-	if m.getByEmail != nil {
-		return m.getByEmail(email)
-	}
-	return nil, nil
 }
