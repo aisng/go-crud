@@ -54,7 +54,7 @@ func (h *UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid paramter 'id'", http.StatusBadRequest)
+		http.Error(w, "Invalid parameter 'id'", http.StatusBadRequest)
 		return
 	}
 
