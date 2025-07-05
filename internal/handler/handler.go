@@ -8,12 +8,6 @@ import (
 	"strings"
 )
 
-type ResouceHandler interface {
-	GetByID(w http.ResponseWriter, r *http.Request)
-	Update(w http.ResponseWriter, r *http.Request)
-	Delete(w http.ResponseWriter, r *http.Request)
-}
-
 type Dependencies struct {
 	UserRepo domain.UserRepository
 }
@@ -22,6 +16,8 @@ type Handler struct {
 	User *UserHandler
 }
 
+type MethodHandlers map[string]http.HandlerFunc
+
 func NewHandler(deps Dependencies) *Handler {
 	return &Handler{
 		User: NewUserHandler(deps.UserRepo),
@@ -29,22 +25,21 @@ func NewHandler(deps Dependencies) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/users", h.User.Create)
-	mux.HandleFunc("/users/{id}", resourceByIDHandler(h.User))
+	mux.HandleFunc("/users", MethodRouter(MethodHandlers{http.MethodPost: h.User.Create}))
+	mux.HandleFunc("/users/{id}", MethodRouter(MethodHandlers{
+		http.MethodGet:    h.User.GetByID,
+		http.MethodPut:    h.User.Update,
+		http.MethodDelete: h.User.Delete,
+	}))
 }
 
-func resourceByIDHandler(handler ResouceHandler) http.HandlerFunc {
+func MethodRouter(handlers MethodHandlers) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handler.GetByID(w, r)
-		case http.MethodPut:
-			handler.Update(w, r)
-		case http.MethodDelete:
-			handler.Delete(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		if h, ok := handlers[r.Method]; ok {
+			h(w, r)
+			return
 		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
