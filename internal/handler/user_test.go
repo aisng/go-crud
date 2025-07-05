@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go-crud/internal/domain"
@@ -13,69 +14,79 @@ import (
 	"time"
 )
 
-var fixedTime = time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+func checkResponseFields(t *testing.T, respBodyStr string, wantFields map[string]any) {
+	var got map[string]any
+	if err := json.Unmarshal([]byte(respBodyStr), &got); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	for field, want := range wantFields {
+		gotVal, ok := got[field]
+		if !ok {
+			t.Errorf("response missing expected field %s: %v", field, got)
+			continue
+		}
+		if fmt.Sprint(gotVal) != fmt.Sprint(want) {
+			t.Errorf("field %s: expected %v, got %v", field, want, gotVal)
+		}
+	}
+}
 
 func TestUserHandler_Create(t *testing.T) {
 	tests := []struct {
 		name       string
-		method     string
 		body       string
 		wantErr    error
 		wantStatus int
-		wantBody   string
+		wantFields map[string]any
 	}{
 		{
 			name:       "success",
-			method:     http.MethodPost,
 			body:       `{"username": "test", "email": "test@email.net", "password": "mypw123"}`,
 			wantErr:    nil,
 			wantStatus: http.StatusCreated,
-			wantBody: fmt.Sprintf(`{"id":1,"email":"test@email.net","username":"test","created_at":"%s","updated_at":"%s"}`,
-				fixedTime.Format(time.RFC3339), fixedTime.Format(time.RFC3339)),
-		},
-		{
-			name:       "invalid method",
-			method:     http.MethodGet,
-			body:       "",
-			wantErr:    nil,
-			wantStatus: http.StatusMethodNotAllowed,
-			wantBody:   "Method not allowed\n",
+			wantFields: map[string]any{
+				"id":       1,
+				"email":    "test@email.net",
+				"username": "test",
+			},
 		},
 		{
 			name:       "invalid json",
-			method:     http.MethodPost,
 			body:       `{bad json}`,
 			wantErr:    nil,
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "Invalid JSON\n",
+			wantFields: nil,
 		},
 		{
 			name:       "repository error",
-			method:     http.MethodPost,
 			body:       `{"username": "test", "email": "test@email.net"}`,
 			wantErr:    errors.New("repo error"),
 			wantStatus: http.StatusInternalServerError,
-			wantBody:   "Failed to create user: repo error\n",
+			wantFields: nil,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repo := &mockUserRepo{
-				createFunc: func(*domain.User) error {
-					return test.wantErr
-				},
+			var repo *mockUserRepo
+			if test.wantErr != nil {
+				repo = &mockUserRepo{
+					createFunc: func(*domain.User) error {
+						return test.wantErr
+					},
+				}
+			} else {
+				repo = &mockUserRepo{}
 			}
 
 			handler := NewUserHandler(repo)
 
-			req := httptest.NewRequest(test.method, "/users", strings.NewReader(test.body))
+			req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(test.body))
 			w := httptest.NewRecorder()
 
 			handler.Create(w, req)
 
 			resp := w.Result()
-
 			defer resp.Body.Close()
 
 			if test.wantStatus != resp.StatusCode {
@@ -88,8 +99,19 @@ func TestUserHandler_Create(t *testing.T) {
 			}
 			respBodyStr := string(respBody)
 
-			if strings.TrimSpace(string(respBody)) != strings.TrimSpace(test.wantBody) {
-				t.Errorf("expected response body: %s, got: %s", test.wantBody, respBodyStr)
+			if test.wantFields != nil {
+				checkResponseFields(t, respBodyStr, test.wantFields)
+			} else {
+				expectedBody := ""
+				switch test.name {
+				case "invalid json":
+					expectedBody = "Invalid JSON\n"
+				case "repository error":
+					expectedBody = "Failed to create user: repo error\n"
+				}
+				if strings.TrimSpace(respBodyStr) != strings.TrimSpace(expectedBody) {
+					t.Errorf("expected response body: %s, got: %s", expectedBody, respBodyStr)
+				}
 			}
 		})
 	}
@@ -98,64 +120,51 @@ func TestUserHandler_Create(t *testing.T) {
 func TestUserHandler_GetByID(t *testing.T) {
 	tests := []struct {
 		name       string
-		method     string
 		path       string
 		repoUser   *domain.User
 		wantErr    error
 		wantStatus int
-		wantBody   string
+		wantFields map[string]any
 	}{
 		{
-			name:   "success",
-			method: http.MethodGet,
-			path:   "/users/1",
+			name: "success",
+			path: "/users/1",
 			repoUser: &domain.User{
-				ID:        1,
-				Email:     "test@email.com",
-				Username:  "testuser",
-				CreatedAt: fixedTime,
-				UpdatedAt: fixedTime,
+				ID:       1,
+				Email:    "test@email.com",
+				Username: "testuser",
 			},
 			wantErr:    nil,
 			wantStatus: http.StatusOK,
-			wantBody: fmt.Sprintf(`{"id":1,"email":"test@email.com","username":"testuser","created_at":"%s","updated_at":"%s"}`,
-				fixedTime.Format(time.RFC3339), fixedTime.Format(time.RFC3339)),
+			wantFields: map[string]any{
+				"id":       1,
+				"email":    "test@email.com",
+				"username": "testuser",
+			},
 		},
 		{
 			name:       "user not found",
-			method:     http.MethodGet,
 			path:       "/users/9999",
 			repoUser:   nil,
 			wantErr:    fmt.Errorf("user not found"),
 			wantStatus: http.StatusNotFound,
-			wantBody:   "User not found\n",
-		},
-		{
-			name:       "method not allowed",
-			method:     http.MethodPost,
-			path:       "/users/1",
-			repoUser:   nil,
-			wantErr:    nil,
-			wantStatus: http.StatusMethodNotAllowed,
-			wantBody:   "Method not allowed\n",
+			wantFields: nil,
 		},
 		{
 			name:       "invalid path",
-			method:     http.MethodGet,
 			path:       "/invalid/path/1",
 			repoUser:   nil,
 			wantErr:    fmt.Errorf("invalid path format"),
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "invalid path format\n",
+			wantFields: nil,
 		},
 		{
 			name:       "invalid id",
-			method:     http.MethodGet,
 			path:       "/users/1b",
 			repoUser:   nil,
 			wantErr:    fmt.Errorf("Invalid parameter 'id'\n"),
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "Invalid parameter 'id'\n",
+			wantFields: nil,
 		},
 	}
 
@@ -168,12 +177,11 @@ func TestUserHandler_GetByID(t *testing.T) {
 			}
 			handler := NewUserHandler(repo)
 
-			req := httptest.NewRequest(test.method, test.path, nil)
+			req := httptest.NewRequest(http.MethodGet, test.path, nil)
 			w := httptest.NewRecorder()
 			handler.GetByID(w, req)
 
 			resp := w.Result()
-
 			defer resp.Body.Close()
 
 			if test.wantStatus != resp.StatusCode {
@@ -186,8 +194,21 @@ func TestUserHandler_GetByID(t *testing.T) {
 			}
 			respBodyStr := string(respBody)
 
-			if strings.TrimSpace(string(respBody)) != strings.TrimSpace(test.wantBody) {
-				t.Errorf("expected response body: %s, got: %s", test.wantBody, respBodyStr)
+			if test.wantFields != nil {
+				checkResponseFields(t, respBodyStr, test.wantFields)
+			} else {
+				expectedBody := ""
+				switch test.name {
+				case "user not found":
+					expectedBody = "User not found\n"
+				case "invalid path":
+					expectedBody = "invalid path format\n"
+				case "invalid id":
+					expectedBody = "Invalid parameter 'id'\n"
+				}
+				if strings.TrimSpace(respBodyStr) != strings.TrimSpace(expectedBody) {
+					t.Errorf("expected response body: %s, got: %s", expectedBody, respBodyStr)
+				}
 			}
 		})
 	}
@@ -196,68 +217,52 @@ func TestUserHandler_GetByID(t *testing.T) {
 func strPtr(s string) *string { return &s }
 
 func TestUserHandler_Update(t *testing.T) {
-	updatedTime := fixedTime.Add(time.Hour)
 	tests := []struct {
 		name       string
-		method     string
 		path       string
 		repoUser   *domain.User
 		updateErr  error
 		body       string
 		wantStatus int
-		wantBody   string
+		wantFields map[string]any
 		wantUpdate *domain.UserUpdate
 	}{
 		{
-			name:   "update email success",
-			method: http.MethodPut,
-			path:   "/users/1",
+			name: "update email success",
+			path: "/users/1",
 			repoUser: &domain.User{
-				ID:        1,
-				Username:  "olduser",
-				Email:     "new@email.com",
-				CreatedAt: fixedTime,
-				UpdatedAt: updatedTime,
+				ID:       1,
+				Username: "olduser",
+				Email:    "new@email.com",
 			},
 			updateErr:  nil,
 			body:       `{"email":"new@email.com"}`,
 			wantStatus: http.StatusOK,
-			wantBody: fmt.Sprintf(
-				`{"id":1,"email":"new@email.com","username":"olduser","created_at":"%s","updated_at":"%s"}`,
-				fixedTime.Format(time.RFC3339), updatedTime.Format(time.RFC3339)),
+			wantFields: map[string]any{
+				"id":       1,
+				"email":    "new@email.com",
+				"username": "olduser",
+			},
 			wantUpdate: &domain.UserUpdate{Email: strPtr("new@email.com")},
 		},
 		{
 			name:       "unknown field in body",
-			method:     http.MethodPut,
 			path:       "/users/1",
 			repoUser:   nil,
 			updateErr:  nil,
 			body:       `{"mail":"new@email.com"}`,
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "Invalid JSON\n",
-			wantUpdate: nil,
-		},
-		{
-			name:       "invalid method",
-			method:     http.MethodPatch,
-			path:       "/users/1",
-			repoUser:   nil,
-			updateErr:  nil,
-			body:       `{"email":"new@email.com"}`,
-			wantStatus: http.StatusMethodNotAllowed,
-			wantBody:   "Method not allowed\n",
+			wantFields: nil,
 			wantUpdate: nil,
 		},
 		{
 			name:       "user not found",
-			method:     http.MethodPut,
 			path:       "/users/9999",
 			repoUser:   nil,
 			updateErr:  fmt.Errorf("user not found"),
 			body:       `{"email":"notfound@email.com"}`,
 			wantStatus: http.StatusNotFound,
-			wantBody:   "User not found\n",
+			wantFields: nil,
 			wantUpdate: &domain.UserUpdate{Email: strPtr("notfound@email.com")},
 		},
 	}
@@ -276,7 +281,7 @@ func TestUserHandler_Update(t *testing.T) {
 				},
 			}
 			handler := NewUserHandler(repo)
-			req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+			req := httptest.NewRequest(http.MethodPut, test.path, strings.NewReader(test.body))
 
 			w := httptest.NewRecorder()
 			handler.Update(w, req)
@@ -294,14 +299,97 @@ func TestUserHandler_Update(t *testing.T) {
 			}
 			respBodyStr := string(respBody)
 
-			if strings.TrimSpace(respBodyStr) != strings.TrimSpace(test.wantBody) {
-				t.Errorf("expected response body: %s, got: %s", test.wantBody, respBodyStr)
+			if test.wantFields != nil {
+				checkResponseFields(t, respBodyStr, test.wantFields)
+			} else {
+				expectedBody := ""
+				switch test.name {
+				case "unknown field in body":
+					expectedBody = "Invalid JSON\n"
+				case "user not found":
+					expectedBody = "User not found\n"
+				}
+				if strings.TrimSpace(respBodyStr) != strings.TrimSpace(expectedBody) {
+					t.Errorf("expected response body: %s, got: %s", expectedBody, respBodyStr)
+				}
 			}
 
 			if test.wantUpdate != nil && gotUpdate != nil {
 				if !reflect.DeepEqual(test.wantUpdate, gotUpdate) {
 					t.Errorf("expected update: %+v, got: %+v", test.wantUpdate, gotUpdate)
 				}
+			}
+		})
+	}
+}
+
+func TestUserHandler_Delete(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		deleteErr  error
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "success",
+			path:       "/users/1",
+			deleteErr:  nil,
+			wantStatus: http.StatusNoContent,
+			wantBody:   "",
+		},
+		{
+			name:       "user not found",
+			path:       "/users/9999",
+			deleteErr:  fmt.Errorf("user not found"),
+			wantStatus: http.StatusNotFound,
+			wantBody:   "User not found\n",
+		},
+		{
+			name:       "invalid path",
+			path:       "/invalid/path/1",
+			deleteErr:  nil,
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "invalid path format\n",
+		},
+		{
+			name:       "invalid id",
+			path:       "/users/1b",
+			deleteErr:  nil,
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "Invalid parameter 'id'\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &mockUserRepo{
+				deleteFunc: func(id int64) error {
+					return test.deleteErr
+				},
+			}
+			handler := NewUserHandler(repo)
+
+			req := httptest.NewRequest(http.MethodDelete, test.path, nil)
+			w := httptest.NewRecorder()
+
+			handler.Delete(w, req)
+
+			resp := w.Result()
+			defer resp.Body.Close()
+
+			if test.wantStatus != resp.StatusCode {
+				t.Errorf("expected status code: %v, got: %v", test.wantStatus, resp.StatusCode)
+			}
+
+			respBody, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			respBodyStr := string(respBody)
+
+			if strings.TrimSpace(respBodyStr) != strings.TrimSpace(test.wantBody) {
+				t.Errorf("expected response body: %s, got: %s", test.wantBody, respBodyStr)
 			}
 		})
 	}
@@ -316,11 +404,11 @@ type mockUserRepo struct {
 
 func (m *mockUserRepo) Create(u *domain.User) error {
 	if m.createFunc != nil {
-		u.ID = 1
-		u.CreatedAt = fixedTime
-		u.UpdatedAt = fixedTime
 		return m.createFunc(u)
 	}
+	u.ID = 1
+	u.CreatedAt = time.Now()
+	u.UpdatedAt = time.Now()
 	return nil
 }
 
