@@ -199,7 +199,7 @@ func TestUserRepository_Update(t *testing.T) {
 			setupMock: func() {
 				mock.ExpectExec(`UPDATE users SET email = \?, updated_at = NOW\(\) WHERE id = \?`).
 					WithArgs("notfound@email.com", 999).
-					WillReturnResult(sqlmock.NewResult(0, 0))
+					WillReturnError(fmt.Errorf("user not found"))
 			},
 			expectedErr: fmt.Errorf("user not found"),
 		},
@@ -221,6 +221,54 @@ func TestUserRepository_Update(t *testing.T) {
 
 			if (subtest.expectedErr == nil && err != nil) || (subtest.expectedErr != nil && err == nil) {
 				t.Errorf("expected error: %v, got: %v", subtest.expectedErr, err)
+			}
+		})
+	}
+}
+
+func TestUserRepository_Delete(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to open sqlmock database: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewUserRepository(db)
+	subtests := []struct {
+		name        string
+		id          int64
+		expectedErr error
+		setupMock   func()
+	}{
+		{
+			name:        "success",
+			id:          1,
+			expectedErr: nil,
+			setupMock: func() {
+				mock.ExpectExec(`DELETE FROM users WHERE id = \?`).
+					WithArgs(1).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		{
+			name:        "user not found",
+			id:          9999,
+			expectedErr: fmt.Errorf("user not found"),
+			setupMock: func() {
+				mock.ExpectExec(`DELETE FROM users WHERE id = \?`).
+					WithArgs(9999).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+			},
+		},
+	}
+	for _, subtest := range subtests {
+		t.Run(subtest.name, func(t *testing.T) {
+			subtest.setupMock()
+
+			err := repo.Delete(subtest.id)
+
+			if (subtest.expectedErr == nil && err != nil) || (subtest.expectedErr != err && err == nil) {
+				t.Errorf("expected errors: %v, got: %v", subtest.expectedErr, err)
 			}
 		})
 	}

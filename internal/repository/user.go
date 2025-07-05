@@ -103,5 +103,21 @@ func (r *UserRepository) Update(id int64, upd *domain.UserUpdate) error {
 }
 
 func (r *UserRepository) Delete(id int64) error {
+	query := "DELETE FROM users WHERE id = ?"
+
+	result, err := r.db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("error deleting user")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
 	return nil
 }
