@@ -102,7 +102,7 @@ func TestUserHandler_Create(t *testing.T) {
 			if test.wantFields != nil {
 				checkResponseFields(t, respBodyStr, test.wantFields)
 			} else {
-				expectedBody := ""
+				var expectedBody string
 				switch test.name {
 				case "invalid json":
 					expectedBody = "Invalid JSON\n"
@@ -197,7 +197,7 @@ func TestUserHandler_GetByID(t *testing.T) {
 			if test.wantFields != nil {
 				checkResponseFields(t, respBodyStr, test.wantFields)
 			} else {
-				expectedBody := ""
+				var expectedBody string
 				switch test.name {
 				case "user not found":
 					expectedBody = "User not found\n"
@@ -302,7 +302,7 @@ func TestUserHandler_Update(t *testing.T) {
 			if test.wantFields != nil {
 				checkResponseFields(t, respBodyStr, test.wantFields)
 			} else {
-				expectedBody := ""
+				var expectedBody string
 				switch test.name {
 				case "unknown field in body":
 					expectedBody = "Invalid JSON\n"
