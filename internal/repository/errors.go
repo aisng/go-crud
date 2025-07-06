@@ -24,4 +24,3 @@ func resolveSQLError(e error) error {
 
 	return fmt.Errorf("unexpected db error: %w", e)
 }
-
