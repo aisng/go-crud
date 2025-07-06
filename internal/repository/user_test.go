@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"database/sql"
 	"fmt"
 	"go-crud/internal/domain"
 	"reflect"
@@ -53,7 +54,7 @@ func TestUserRepository_Create(t *testing.T) {
 			name:        "Create duplicate entry",
 			user:        user,
 			expectedID:  0,
-			expectedErr: fmt.Errorf("Duplicate entry"),
+			expectedErr: domain.ErrAlreadyExists,
 			setupMock: func() {
 				mock.ExpectExec(`INSERT INTO users`).
 					WithArgs(user.Username, user.Email, user.Password).
@@ -63,14 +64,15 @@ func TestUserRepository_Create(t *testing.T) {
 	}
 	for _, subtest := range subtests {
 		t.Run(subtest.name, func(t *testing.T) {
-			switch subtest.name {
-			case "success":
-				subtest.setupMock()
+			subtest.setupMock()
 
-				err := repo.Create(subtest.user)
-				if err != nil {
-					t.Errorf("Expected no error, got: %v", err)
-				}
+			err := repo.Create(subtest.user)
+
+			if (subtest.expectedErr == nil && err != nil) || (subtest.expectedErr != nil && err == nil) {
+				t.Errorf("expected error: %v, got: %v", subtest.expectedErr, err)
+			}
+
+			if subtest.expectedErr == nil {
 				if subtest.user.ID != subtest.expectedID {
 					t.Errorf("Expected ID: %d, got: %d", subtest.expectedID, subtest.user.ID)
 				}
@@ -80,13 +82,6 @@ func TestUserRepository_Create(t *testing.T) {
 				if subtest.user.UpdatedAt.IsZero() {
 					t.Error("Expected UpdatedAt to be set")
 				}
-			case "duplicate entry":
-				err := repo.Create(subtest.user)
-
-				if err != subtest.expectedErr {
-					t.Errorf("expected duplicate entry error, got: %v", err)
-				}
-
 			}
 		})
 	}
@@ -134,11 +129,11 @@ func TestUserRepository_GetByID(t *testing.T) {
 			name:         "user not found",
 			id:           9999,
 			expectedUser: nil,
-			expectedErr:  fmt.Errorf("user not found"),
+			expectedErr:  domain.ErrNotFound,
 			setupMock: func() {
 				mock.ExpectQuery(`SELECT id, username, email, created_at, updated_at FROM users WHERE id = \?`).
 					WithArgs(9999).
-					WillReturnError(fmt.Errorf("user not found"))
+					WillReturnError(sql.ErrNoRows)
 			},
 		},
 	}
@@ -199,9 +194,9 @@ func TestUserRepository_Update(t *testing.T) {
 			setupMock: func() {
 				mock.ExpectExec(`UPDATE users SET email = \?, updated_at = NOW\(\) WHERE id = \?`).
 					WithArgs("notfound@email.com", 999).
-					WillReturnError(fmt.Errorf("user not found"))
+					WillReturnResult(sqlmock.NewResult(0, 0))
 			},
-			expectedErr: fmt.Errorf("user not found"),
+			expectedErr: domain.ErrNotFound,
 		},
 		{
 			name:   "no fields to update",
@@ -210,6 +205,19 @@ func TestUserRepository_Update(t *testing.T) {
 			setupMock: func() {
 			},
 			expectedErr: nil,
+		},
+		{
+			name: "database error",
+			id:   1,
+			update: &domain.UserUpdate{
+				Email: strPtr("test@email.com"),
+			},
+			setupMock: func() {
+				mock.ExpectExec(`UPDATE users SET email = \?, updated_at = NOW\(\) WHERE id = \?`).
+					WithArgs("test@email.com", 1).
+					WillReturnError(fmt.Errorf("connection lost"))
+			},
+			expectedErr: fmt.Errorf("unexpected db error: connection lost"),
 		},
 	}
 
@@ -253,7 +261,7 @@ func TestUserRepository_Delete(t *testing.T) {
 		{
 			name:        "user not found",
 			id:          9999,
-			expectedErr: fmt.Errorf("user not found"),
+			expectedErr: domain.ErrNotFound,
 			setupMock: func() {
 				mock.ExpectExec(`DELETE FROM users WHERE id = \?`).
 					WithArgs(9999).

@@ -3,7 +3,6 @@ package repository
 
 import (
 	"database/sql"
-	"fmt"
 	"go-crud/internal/domain"
 	"strings"
 )
@@ -24,12 +23,12 @@ func (r *UserRepository) Create(user *domain.User) error {
 
 	result, err := r.db.Exec(query, user.Username, user.Email, user.Password)
 	if err != nil {
-		return err
+		return resolveSQLError(err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		return err
+		return resolveSQLError(err)
 	}
 
 	user.ID = id
@@ -37,7 +36,7 @@ func (r *UserRepository) Create(user *domain.User) error {
 	row := r.db.QueryRow("SELECT created_at, updated_at FROM users WHERE id = ?", user.ID)
 	err = row.Scan(&user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		return err
+		return resolveSQLError(err)
 	}
 	return nil
 }
@@ -52,8 +51,7 @@ func (r *UserRepository) GetByID(id int64) (*domain.User, error) {
 	var user domain.User
 	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		fmt.Printf("user not found error: %v", err)
-		return nil, err
+		return nil, resolveSQLError(err)
 	}
 
 	return &user, nil
@@ -88,16 +86,16 @@ func (r *UserRepository) Update(id int64, upd *domain.UserUpdate) error {
 
 	result, err := r.db.Exec(query, args...)
 	if err != nil {
-		return err
+		return resolveSQLError(err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return resolveSQLError(err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("user not found")
+		return domain.ErrNotFound
 	}
 	return nil
 }
@@ -107,16 +105,16 @@ func (r *UserRepository) Delete(id int64) error {
 
 	result, err := r.db.Exec(query, id)
 	if err != nil {
-		return fmt.Errorf("error deleting user")
+		return resolveSQLError(err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return resolveSQLError(err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("user not found")
+		return domain.ErrNotFound
 	}
 
 	return nil
